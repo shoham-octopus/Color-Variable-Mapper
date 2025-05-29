@@ -14,107 +14,150 @@ figma.showUI(__html__, {
     height: 500,
     themeColors: true
 });
-// Get all styles and variables
-console.log("[Debug] Starting to gather styles and variables...");
 function initializePlugin() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            // Try different methods to get styles
-            console.log("[Debug] Current page:", figma.currentPage.name);
-            console.log("[Debug] Document:", {
-                name: figma.root.name,
-                type: figma.root.type,
-                children: figma.root.children.length
-            });
-            // Get styles using different methods
-            const localPaintStyles = yield figma.getLocalPaintStylesAsync();
-            console.log("[Debug] Local paint styles:", {
-                count: localPaintStyles.length,
-                styles: localPaintStyles.map(s => ({
-                    name: s.name,
-                    id: s.id,
-                    description: s.description,
-                    key: s.key
-                }))
-            });
-            // Try to find nodes that have styles applied
-            const nodesWithStyles = figma.currentPage.findAll(node => {
-                if ('fillStyleId' in node) {
-                    return node.fillStyleId !== '';
-                }
-                return false;
-            });
-            console.log("[Debug] Nodes with fill styles:", {
-                count: nodesWithStyles.length,
-                nodes: nodesWithStyles.map(n => ({
-                    name: n.name,
-                    type: n.type,
-                    styleId: n.fillStyleId
-                }))
-            });
-            if (localPaintStyles.length === 0) {
-                console.log("[Debug] No color styles found in the file. Please create some color styles first.");
-                figma.notify("No color styles found in the file. Please create some color styles first.");
+            console.log("[Debug] Starting plugin initialization...");
+            // Get selected node details
+            const selection = figma.currentPage.selection;
+            if (selection.length === 0) {
+                console.log("[Debug] No selection");
+                figma.notify("Please select a node with styles applied");
                 return;
             }
-            const colorVariables = yield figma.variables.getLocalVariablesAsync().then(vars => {
-                const colorVars = vars.filter(v => v.resolvedType === 'COLOR');
-                console.log("[Debug] Color variables:", colorVars.map(v => ({
-                    name: v.name,
-                    type: v.resolvedType,
-                    key: v.key,
-                    id: v.id
+            const node = selection[0];
+            // Log EVERYTHING about the node
+            console.log("[Debug] Full node dump:", {
+                name: node.name,
+                type: node.type,
+                id: node.id,
+                visible: node.visible,
+                locked: node.locked,
+                opacity: node.opacity,
+                blendMode: node.blendMode,
+                effectStyleId: node.effectStyleId,
+                fillStyleId: node.fillStyleId,
+                strokeStyleId: node.strokeStyleId,
+                backgroundStyleId: node.backgroundStyleId,
+                textStyleId: node.textStyleId,
+                gridStyleId: node.gridStyleId,
+                styles: node.styles,
+                fills: node.fills,
+                strokes: node.strokes,
+                effects: node.effects,
+                characters: node.characters
+            });
+            // Check if node has any fills
+            if ('fills' in node) {
+                const fills = node.fills;
+                console.log("[Debug] Node fills detailed:", fills === null || fills === void 0 ? void 0 : fills.map((fill) => ({
+                    type: fill.type,
+                    visible: fill.visible,
+                    blendMode: fill.blendMode,
+                    color: fill.type === 'SOLID' ? fill.color : undefined,
+                    gradientStops: fill.type === 'GRADIENT_LINEAR' || fill.type === 'GRADIENT_RADIAL' ? fill.gradientStops : undefined,
+                    imageHash: fill.type === 'IMAGE' ? fill.imageHash : undefined,
+                    scaleMode: fill.type === 'IMAGE' ? fill.scaleMode : undefined,
+                    scalingFactor: fill.type === 'IMAGE' ? fill.scalingFactor : undefined,
+                    rotation: fill.type === 'GRADIENT_LINEAR' ? fill.rotation : undefined,
+                    opacity: fill.opacity
                 })));
-                return colorVars;
-            });
-            console.log('Initialized with:', {
-                colorStyles: localPaintStyles.length,
-                colorVariables: colorVariables.length
-            });
-            // Initialize UI with styles and variables
-            const styleData = localPaintStyles.map(style => {
-                // Get the first solid paint
-                const paints = style.paints;
-                console.log(`[Debug] Style "${style.name}" paints:`, {
-                    count: paints.length,
-                    types: paints.map(p => p.type),
-                    raw: paints
-                });
-                const firstSolidPaint = paints.find(paint => paint.type === 'SOLID');
-                console.log(`[Debug] Processing style "${style.name}":`, {
-                    id: style.id,
-                    paintTypes: paints.map(p => p.type),
-                    firstSolidColor: firstSolidPaint === null || firstSolidPaint === void 0 ? void 0 : firstSolidPaint.color
-                });
-                return {
-                    id: style.id,
-                    name: style.name,
-                    color: firstSolidPaint.color
-                };
-            });
-            const variableData = colorVariables.map(variable => ({
-                id: variable.id,
-                name: variable.name
-            }));
-            // Create suggestions map
-            const suggestions = {};
-            for (const style of styleData) {
-                const bestMatch = findBestVariableMatch(style.name, colorVariables);
-                if (bestMatch) {
-                    suggestions[style.id] = bestMatch;
+            }
+            // Check if the node has any styles object
+            if ('styles' in node) {
+                const styles = node.styles;
+                console.log("[Debug] Node styles object:", styles);
+                // Try to get each style referenced in the styles object
+                for (const [styleType, styleId] of Object.entries(styles)) {
+                    try {
+                        const style = figma.getStyleById(styleId);
+                        console.log(`[Debug] Found style for ${styleType}:`, {
+                            id: styleId,
+                            name: style === null || style === void 0 ? void 0 : style.name,
+                            type: style === null || style === void 0 ? void 0 : style.type,
+                            remote: style === null || style === void 0 ? void 0 : style.remote,
+                            key: style === null || style === void 0 ? void 0 : style.key,
+                            description: style === null || style === void 0 ? void 0 : style.description
+                        });
+                        // If it's a paint style, log its paint properties
+                        if ((style === null || style === void 0 ? void 0 : style.type) === 'PAINT') {
+                            const paintStyle = style;
+                            console.log(`[Debug] Paint style details for ${styleType}:`, {
+                                paints: paintStyle.paints,
+                                description: paintStyle.description
+                            });
+                        }
+                    }
+                    catch (e) {
+                        console.log(`[Debug] Error getting style for ${styleType}:`, e);
+                    }
                 }
             }
-            console.log('[Debug] Final data being sent to UI:', {
-                styles: styleData,
-                variables: variableData,
-                suggestions
+            // Try to get all paint styles in the document
+            const localPaintStyles = yield figma.getLocalPaintStylesAsync();
+            console.log("[Debug] Local paint styles:", localPaintStyles.map(style => ({
+                id: style.id,
+                name: style.name,
+                type: style.type,
+                remote: style.remote,
+                key: style.key,
+                description: style.description,
+                paints: style.paints
+            })));
+            // Get all variables
+            const variables = yield figma.variables.getLocalVariablesAsync();
+            const colorVariables = variables.filter(v => v.resolvedType === 'COLOR');
+            console.log("[Debug] Found variables:", {
+                total: variables.length,
+                colors: colorVariables.length,
+                variables: colorVariables.map(v => ({
+                    name: v.name,
+                    id: v.id,
+                    type: v.resolvedType,
+                    remote: v.remote,
+                    key: v.key,
+                    description: v.description,
+                    valuesByMode: v.valuesByMode
+                }))
             });
-            // Send initial data to UI
+            // Try to match styles with variables
+            const suggestions = new Map();
+            localPaintStyles.forEach(style => {
+                // Find matching variable by name
+                const matchingVar = colorVariables.find(v => {
+                    const styleName = style.name.toLowerCase();
+                    const varName = v.name.toLowerCase();
+                    return styleName === varName ||
+                        styleName.endsWith('/' + varName) ||
+                        varName.endsWith('/' + styleName);
+                });
+                if (matchingVar) {
+                    suggestions.set(style.id, matchingVar.id);
+                    console.log("[Debug] Found style-variable match:", {
+                        style: style.name,
+                        variable: matchingVar.name
+                    });
+                }
+            });
+            // Send data to UI
             figma.ui.postMessage({
                 type: 'init',
-                styles: styleData,
-                variables: variableData,
-                suggestions
+                data: {
+                    styles: localPaintStyles.map(s => ({
+                        id: s.id,
+                        name: s.name,
+                        remote: s.remote,
+                        key: s.key,
+                        paints: s.paints
+                    })),
+                    variables: colorVariables.map(v => ({
+                        id: v.id,
+                        name: v.name,
+                        remote: v.remote,
+                        valuesByMode: v.valuesByMode
+                    })),
+                    suggestions: Object.fromEntries(suggestions)
+                }
             });
         }
         catch (error) {
@@ -123,151 +166,56 @@ function initializePlugin() {
         }
     });
 }
-// Function to get the similarity score between two strings
-function stringSimilarity(str1, str2) {
-    const s1 = str1.toLowerCase();
-    const s2 = str2.toLowerCase();
-    // If the strings are exactly the same, return 1
-    if (s1 === s2)
-        return 1;
-    // If one string contains the other, return 0.8
-    if (s1.includes(s2) || s2.includes(s1))
-        return 0.8;
-    // Split into words and check for common words
-    const words1 = new Set(s1.split(/[^a-z0-9]+/));
-    const words2 = new Set(s2.split(/[^a-z0-9]+/));
-    let commonWords = 0;
-    for (const word of words1) {
-        if (words2.has(word))
-            commonWords++;
-    }
-    // Return a score based on common words
-    return commonWords / Math.max(words1.size, words2.size);
-}
-// Function to find the best variable match for a style
-function findBestVariableMatch(styleName, variables) {
-    let bestMatch = null;
-    let bestScore = 0;
-    for (const variable of variables) {
-        const score = stringSimilarity(styleName, variable.name);
-        if (score > bestScore && score > 0.5) { // Only suggest if similarity > 50%
-            bestScore = score;
-            bestMatch = { id: variable.id };
-        }
-    }
-    return bestMatch;
-}
+// Initialize the plugin
+initializePlugin().catch(error => {
+    console.error('Error initializing plugin:', error);
+    figma.notify('Error initializing plugin', { error: true });
+});
 // Handle messages from UI
 figma.ui.onmessage = (msg) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
     if (msg.type === 'apply-mapping') {
         try {
-            console.log('Received mappings:', msg.mappings);
-            let mappedCount = 0;
-            // Get fresh copies of styles and variables
-            const paintStyles = yield figma.getLocalPaintStylesAsync();
-            const colorVariables = yield figma.variables.getLocalVariablesAsync().then(vars => vars.filter(v => v.resolvedType === 'COLOR'));
-            // Apply the selected mappings
-            for (const [styleId, variableId] of Object.entries(msg.mappings)) {
-                console.log('Processing mapping:', { styleId, variableId });
-                const style = paintStyles.find(s => s.id === styleId);
-                const variable = colorVariables.find(v => v.id === variableId);
-                if (!style) {
-                    console.log('Style not found:', styleId);
-                    continue;
-                }
-                if (!variable) {
-                    console.log('Variable not found:', variableId);
-                    continue;
-                }
-                console.log('Found style and variable:', {
-                    styleName: style.name,
-                    variableName: variable.name
-                });
+            const { styleId, variableId } = msg;
+            // Get the style and variable
+            const style = figma.getStyleById(styleId);
+            const variable = (yield figma.variables.getLocalVariablesAsync())
+                .find(v => v.id === variableId);
+            if (!style || !variable) {
+                throw new Error("Style or variable not found");
+            }
+            // Find all nodes using this style
+            const nodesWithStyle = figma.currentPage.findAll(node => ('fillStyleId' in node && node.fillStyleId === styleId) ||
+                ('strokeStyleId' in node && node.strokeStyleId === styleId));
+            // Update each node
+            let updatedCount = 0;
+            for (const node of nodesWithStyle) {
                 try {
-                    // Get the current color from the variable
-                    const collection = variable.variableCollectionId;
-                    const modeId = (_a = (yield figma.variables.getVariableCollectionByIdAsync(collection))) === null || _a === void 0 ? void 0 : _a.modes[0].modeId;
-                    if (!modeId) {
-                        console.error('Could not find mode ID for variable');
-                        continue;
+                    if ('fills' in node) {
+                        // Create a new fill with the variable
+                        const newFill = {
+                            type: 'SOLID',
+                            color: { r: 0, g: 0, b: 0 },
+                            opacity: 1
+                        };
+                        // Bind the variable to the fill
+                        const boundFill = figma.variables.setBoundVariableForPaint(newFill, 'color', variable);
+                        // Apply the fill
+                        node.fills = [boundFill];
+                        updatedCount++;
                     }
-                    // Get the current color value
-                    const currentValue = variable.valuesByMode[modeId];
-                    if (typeof currentValue !== 'object' || !('r' in currentValue)) {
-                        console.error('Invalid variable value:', currentValue);
-                        continue;
-                    }
-                    // Find all nodes using this style
-                    const nodes = figma.currentPage.findAll(node => {
-                        // Check if node has the required properties
-                        return node.type !== 'SLICE'
-                            && 'fillStyleId' in node
-                            && 'fills' in node
-                            && node.fillStyleId === style.id;
-                    });
-                    console.log(`Found ${nodes.length} nodes using style ${style.name}`);
-                    // Update each node to use the variable
-                    for (const node of nodes) {
-                        try {
-                            console.log('Processing node:', {
-                                name: node.name,
-                                type: node.type,
-                                fillStyleId: node.fillStyleId
-                            });
-                            // Store the original style ID
-                            yield node.setPluginData('originalStyleId', style.id);
-                            // Create a solid fill with the current color
-                            const solidFill = {
-                                type: 'SOLID',
-                                color: currentValue,
-                                opacity: 1
-                            };
-                            // Apply the fill and bind the variable
-                            const boundFill = figma.variables.setBoundVariableForPaint(solidFill, 'color', variable);
-                            console.log('Created bound fill:', boundFill);
-                            // Apply the fill to the node
-                            node.fills = [boundFill];
-                            mappedCount++;
-                            console.log('Successfully updated node:', node.name);
-                        }
-                        catch (nodeError) {
-                            console.error('Error updating node:', {
-                                name: node.name,
-                                error: nodeError
-                            });
-                        }
-                    }
-                    // Update the style description to indicate it's been converted
-                    style.description = `Converted to variable: ${variable.name}`;
                 }
-                catch (error) {
-                    console.error('Error updating style:', {
-                        styleId,
-                        variableId,
-                        styleName: style.name,
-                        variableName: variable.name,
-                        error: error.message
-                    });
+                catch (e) {
+                    console.error("[Debug] Error updating node:", e);
                 }
             }
-            const message = `Successfully mapped ${mappedCount} instances to variables`;
-            console.log(message);
-            figma.notify(message);
+            figma.notify(`Updated ${updatedCount} instances`);
         }
         catch (error) {
-            console.error('Error applying mappings:', error);
-            figma.notify('Error applying mappings', { error: true });
+            console.error("[Debug] Error in apply-mapping:", error);
+            figma.notify("Error applying mapping: " + error.message, { error: true });
         }
     }
     if (msg.type === 'close') {
         figma.closePlugin();
     }
 });
-// Initialize the plugin
-initializePlugin().catch(error => {
-    console.error('Error initializing plugin:', error);
-    figma.notify('Error initializing plugin', { error: true });
-});
-// Log when the plugin is ready
-console.log("[Debug] Plugin initialization complete");
