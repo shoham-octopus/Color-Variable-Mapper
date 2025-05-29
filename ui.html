@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: Inter, sans-serif;
+      padding: 20px;
+      color: var(--figma-color-text);
+      background-color: var(--figma-color-bg);
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .style-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .style-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      border-radius: 6px;
+      background: var(--figma-color-bg-secondary);
+    }
+    .color-preview {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      border: 1px solid var(--figma-color-border);
+    }
+    .style-info {
+      flex-grow: 1;
+    }
+    .style-name {
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+    .variable-select {
+      width: 160px;
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid var(--figma-color-border);
+      background: var(--figma-color-bg);
+      color: var(--figma-color-text);
+      font-size: 12px;
+      cursor: pointer;
+      outline: none;
+    }
+    .variable-select:hover {
+      border-color: var(--figma-color-border-strong);
+    }
+    .variable-select:focus {
+      border-color: var(--figma-color-border-selected);
+    }
+    .button-container {
+      display: flex;
+      gap: 8px;
+    }
+    button {
+      flex: 1;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .primary {
+      background: var(--figma-color-bg-brand);
+      color: var(--figma-color-text-onbrand);
+    }
+    .secondary {
+      background: var(--figma-color-bg-secondary);
+      color: var(--figma-color-text);
+    }
+    .no-styles {
+      text-align: center;
+      padding: 20px;
+      color: var(--figma-color-text-secondary);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Map Styles to Variables</h2>
+    <div id="styleList" class="style-list">
+      <!-- Styles will be populated here -->
+    </div>
+    <div class="button-container">
+      <button class="primary" id="apply">Apply Mapping</button>
+      <button class="secondary" id="close">Close</button>
+    </div>
+  </div>
+
+  <script>
+    // Function to create a color preview element
+    function createColorPreview(color) {
+      console.log('[Debug] Creating color preview for:', color);
+      const preview = document.createElement('div');
+      preview.className = 'color-preview';
+      preview.style.backgroundColor = `rgb(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)})`;
+      return preview;
+    }
+
+    // Function to create a variable select element
+    function createVariableSelect(style, variables, suggestedMatch) {
+      console.log('[Debug] Creating variable select for style:', {
+        styleId: style.id,
+        styleName: style.name,
+        variablesCount: variables.length,
+        suggestedMatch
+      });
+
+      const select = document.createElement('select');
+      select.className = 'variable-select';
+      select.dataset.styleId = style.id;
+
+      // Add a "None" option
+      const noneOption = document.createElement('option');
+      noneOption.value = '';
+      noneOption.textContent = 'Select variable...';
+      select.appendChild(noneOption);
+
+      // Add all variables as options, sorted alphabetically
+      variables.sort((a, b) => a.name.localeCompare(b.name)).forEach(variable => {
+        const option = document.createElement('option');
+        option.value = variable.id;
+        option.textContent = variable.name;
+        // If this is the suggested match, select it
+        if (suggestedMatch && variable.id === suggestedMatch.id) {
+          option.selected = true;
+        }
+        select.appendChild(option);
+      });
+
+      return select;
+    }
+
+    // Listen for the plugin message with styles and variables
+    window.onmessage = async (event) => {
+      try {
+        console.log('[Debug] Raw event received:', {
+          hasData: !!event.data,
+          hasPluginMessage: !!event.data?.pluginMessage,
+          messageType: event.data?.pluginMessage?.type
+        });
+        
+        if (!event.data || !event.data.pluginMessage) {
+          console.error('[Debug] Invalid event format:', event);
+          return;
+        }
+        
+        const msg = event.data.pluginMessage;
+        console.log('[Debug] Parsed plugin message:', {
+          type: msg.type,
+          stylesCount: msg.styles?.length,
+          variablesCount: msg.variables?.length,
+          suggestionsCount: msg.suggestions ? Object.keys(msg.suggestions).length : 0
+        });
+        
+        if (msg.type === 'init') {
+          const { styles, variables, suggestions } = msg;
+          const styleList = document.getElementById('styleList');
+          
+          if (!styleList) {
+            console.error('[Debug] Could not find styleList element');
+            return;
+          }
+
+          console.log('[Debug] Processing initialization data:', {
+            stylesData: styles?.map(s => ({ name: s.name, id: s.id })),
+            variablesData: variables?.map(v => ({ name: v.name, id: v.id })),
+            suggestionsData: suggestions
+          });
+
+          if (!styles || styles.length === 0) {
+            console.log('[Debug] No styles found, showing empty state');
+            styleList.innerHTML = '<div class="no-styles">No color styles found in this file</div>';
+            return;
+          }
+
+          // Clear existing content
+          styleList.innerHTML = '';
+
+          // Sort styles alphabetically by name
+          styles.sort((a, b) => a.name.localeCompare(b.name));
+
+          // Create list items for each style
+          styles.forEach(style => {
+            try {
+              console.log('[Debug] Creating style item for:', style);
+              
+              const item = document.createElement('div');
+              item.className = 'style-item';
+
+              const preview = createColorPreview(style.color);
+              
+              const info = document.createElement('div');
+              info.className = 'style-info';
+              info.innerHTML = `<div class="style-name">${style.name}</div>`;
+
+              const suggestedMatch = suggestions[style.id];
+              const select = createVariableSelect(style, variables, suggestedMatch);
+
+              item.appendChild(preview);
+              item.appendChild(info);
+              item.appendChild(select);
+              styleList.appendChild(item);
+              
+              console.log('[Debug] Successfully created style item:', style.name);
+            } catch (styleError) {
+              console.error('[Debug] Error processing style:', style, styleError);
+            }
+          });
+        }
+      } catch (error) {
+        console.error('[Debug] Error in message handler:', error);
+      }
+    };
+
+    // Handle apply button click
+    document.getElementById('apply').onclick = () => {
+      const mappings = {};
+      document.querySelectorAll('.variable-select').forEach(select => {
+        if (select.value) {
+          mappings[select.dataset.styleId] = select.value;
+        }
+      });
+      
+      console.log('[Debug] Sending mappings to plugin:', mappings);
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'apply-mapping',
+          mappings 
+        }
+      }, '*');
+    };
+
+    // Handle close button click
+    document.getElementById('close').onclick = () => {
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'close' 
+        }
+      }, '*');
+    };
+  </script>
+</body>
+</html>

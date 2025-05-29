@@ -1,0 +1,16 @@
+{
+  "name": "color-variable-debug",
+  "version": "1.0.0",
+  "description": "Debug version of the Color Variable Mapper Figma plugin",
+  "main": "code.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@figma/plugin-typings": "*",
+    "typescript": "^5.0.0"
+  }
+} 
